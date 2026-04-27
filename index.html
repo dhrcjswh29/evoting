@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>모바일 투표소</title>
+    <!-- 구글 폰트: 현대적이고 세련된 Inter 폰트 적용 -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <!-- Supabase JS 라이브러리 로드 -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <style>
+        /* [1] 전역 스타일 & 다크모드/글래스모피즘 기반 배경 */
+        :root {
+            --bg-gradient-1: #4facfe;
+            --bg-gradient-2: #00f2fe;
+            --glass-bg: rgba(255, 255, 255, 0.15);
+            --glass-border: rgba(255, 255, 255, 0.3);
+            --glass-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+            --text-color: #ffffff;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            background: linear-gradient(135deg, var(--bg-gradient-1), var(--bg-gradient-2));
+            background-attachment: fixed;
+            color: var(--text-color);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            overflow-x: hidden;
+        }
+
+        /* 배경을 천천히 움직이게 하는 애니메이션 */
+        body::before {
+            content: '';
+            position: fixed;
+            top: -50%; left: -50%; width: 200%; height: 200%;
+            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 60%);
+            animation: pulseBg 15s infinite linear;
+            z-index: -1;
+        }
+
+        @keyframes pulseBg {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* [2] 메인 컨테이너 (글래스모피즘) */
+        .container {
+            background: var(--glass-bg);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--glass-border);
+            border-radius: 24px;
+            padding: 40px 24px;
+            width: 100%;
+            max-width: 480px;
+            box-shadow: var(--glass-shadow);
+            text-align: center;
+            animation: slideUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) both;
+        }
+
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(40px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        h1 {
+            font-size: 28px;
+            font-weight: 800;
+            margin-bottom: 8px;
+            letter-spacing: -0.5px;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+
+        p.subtitle {
+            font-size: 15px;
+            opacity: 0.85;
+            margin-bottom: 32px;
+        }
+
+        /* [3] 후보자 버튼 리스트 */
+        .candidate-list {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .candidate-btn {
+            background: rgba(255, 255, 255, 0.2);
+            border: 1px solid rgba(255,255,255,0.4);
+            border-radius: 16px;
+            padding: 20px;
+            color: white;
+            font-size: 20px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+
+        /* 버튼 컬러 테마 적용을 위한 가상 요소 */
+        .candidate-btn::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; width: 10px; height: 100%;
+            background-color: var(--theme-color, #ffffff);
+            transition: width 0.3s ease;
+        }
+
+        .candidate-btn:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.2);
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .candidate-btn:active {
+            transform: translateY(2px) scale(0.98);
+        }
+
+        .candidate-btn:hover::before {
+            width: 100%;
+            opacity: 0.2;
+        }
+
+        .candidate-name {
+            z-index: 1;
+            letter-spacing: 1px;
+        }
+
+        /* [4] 로딩 애니메이션 */
+        .loader {
+            width: 48px;
+            height: 48px;
+            border: 4px solid rgba(255,255,255,0.3);
+            border-bottom-color: white;
+            border-radius: 50%;
+            display: inline-block;
+            animation: rotation 1s linear infinite;
+            margin: 20px auto;
+        }
+
+        @keyframes rotation {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* [5] 결과 및 에러 화면 */
+        #result-section, #error-section {
+            display: none;
+        }
+
+        .icon-large {
+            font-size: 72px;
+            margin-bottom: 16px;
+            display: block;
+            animation: popIn 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) both;
+        }
+
+        @keyframes popIn {
+            from { transform: scale(0); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="container" id="main-container">
+        <!-- 로딩 화면 -->
+        <div id="loading-section">
+            <span class="loader"></span>
+            <p style="margin-top: 16px; font-weight: 600;">투표 정보를 불러오는 중...</p>
+        </div>
+
+        <!-- 에러 화면 -->
+        <div id="error-section">
+            <span class="icon-large">🚫</span>
+            <h1 id="error-title">접속 오류</h1>
+            <p class="subtitle" id="error-msg">잘못된 접근이거나 종료된 투표입니다.</p>
+        </div>
+
+        <!-- 투표 화면 -->
+        <div id="voting-section" style="display: none;">
+            <h1>투표하기</h1>
+            <p class="subtitle">한 표를 신중하게 행사해 주세요.</p>
+            <div class="candidate-list" id="candidate-list">
+                <!-- JS에서 동적으로 버튼 추가됨 -->
+            </div>
+        </div>
+
+        <!-- 투표 완료 화면 -->
+        <div id="result-section">
+            <span class="icon-large">🎉</span>
+            <h1>투표 완료!</h1>
+            <p class="subtitle">소중한 한 표가 전송되었습니다.<br>비밀 보장을 위해 창을 닫아주세요.</p>
+        </div>
+    </div>
+
+    <script>
+        // ==========================================
+        // 1. Supabase 연동 설정 (선생님 제공 키)
+        // ==========================================
+        const SUPABASE_URL = 'https://zeebipggzejvecfmwjti.supabase.co';
+        const SUPABASE_ANON_KEY = 'sb_publishable_ryAPFRiUIR0ulwLvofoTRQ_Z22kPoa0';
+        
+        const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        // ==========================================
+        // 2. URL 파라미터에서 방 번호(room_id) 추출
+        // ==========================================
+        const urlParams = new URLSearchParams(window.location.search);
+        const roomId = urlParams.get('room_id');
+
+        // UI 요소 캐싱
+        const loadingSec = document.getElementById('loading-section');
+        const errorSec = document.getElementById('error-section');
+        const votingSec = document.getElementById('voting-section');
+        const resultSec = document.getElementById('result-section');
+        const listDiv = document.getElementById('candidate-list');
+
+        // ==========================================
+        // 3. 앱 초기화 로직
+        // ==========================================
+        async function init() {
+            if (!roomId) {
+                showError('잘못된 접근', 'QR 코드를 다시 스캔해 주세요.');
+                return;
+            }
+
+            // [로컬 중복 투표 방지] 이 기기에서 이미 이 방에 투표했는지 확인
+            const hasVoted = localStorage.getItem(`voted_${roomId}`);
+            if (hasVoted) {
+                showResult();
+                return;
+            }
+
+            try {
+                // 1. 투표 방이 존재하는지, 활성화(is_active) 상태인지 검증
+                const { data: sessionData, error: sessionErr } = await supabase
+                    .from('voting_sessions')
+                    .select('is_active')
+                    .eq('id', roomId)
+                    .single();
+
+                if (sessionErr || !sessionData) {
+                    showError('방을 찾을 수 없음', '존재하지 않거나 삭제된 투표입니다.');
+                    return;
+                }
+
+                if (!sessionData.is_active) {
+                    showError('투표 종료', '이미 마감된 투표입니다.');
+                    return;
+                }
+
+                // 2. 후보자 목록 불러오기
+                const { data: candidates, error: candidateErr } = await supabase
+                    .from('candidates')
+                    .select('*')
+                    .eq('session_id', roomId);
+
+                if (candidateErr || !candidates || candidates.length === 0) {
+                    showError('후보자 없음', '등록된 후보자가 없습니다.');
+                    return;
+                }
+
+                // 3. UI 렌더링
+                renderCandidates(candidates);
+
+            } catch (err) {
+                console.error(err);
+                showError('네트워크 오류', '인터넷 연결을 확인해 주세요.');
+            }
+        }
+
+        // ==========================================
+        // 4. 후보자 버튼 렌더링 함수
+        // ==========================================
+        function renderCandidates(candidates) {
+            listDiv.innerHTML = ''; // 초기화
+            
+            candidates.forEach((c, index) => {
+                const btn = document.createElement('button');
+                btn.className = 'candidate-btn';
+                
+                // Color Theme 파싱 (ex: "0xFF2196F3" -> "#2196F3")
+                let hexColor = '#ffffff';
+                if (c.color_theme) {
+                    try {
+                        const intColor = parseInt(c.color_theme);
+                        hexColor = '#' + (intColor & 0xFFFFFF).toString(16).padStart(6, '0');
+                    } catch(e) {}
+                }
+                btn.style.setProperty('--theme-color', hexColor);
+                
+                // 버튼 하나씩 순차적으로 나타나는 애니메이션 (Stagger effect)
+                btn.style.animation = `slideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) ${0.1 * index}s both`;
+
+                btn.innerHTML = `<span class="candidate-name">${c.name}</span>`;
+                
+                // 투표하기 이벤트 연동
+                btn.onclick = () => castVote(c.id, c.name);
+                
+                listDiv.appendChild(btn);
+            });
+
+            // 로딩 끄고 투표창 보이기
+            loadingSec.style.display = 'none';
+            votingSec.style.display = 'block';
+        }
+
+        // ==========================================
+        // 5. 투표 데이터 전송 함수
+        // ==========================================
+        async function castVote(candidateId, candidateName) {
+            // 더블클릭 방지 및 확인창
+            if(!confirm(`[${candidateName}] 후보에게 투표하시겠습니까?\n한 번 투표하면 번복할 수 없습니다.`)) return;
+
+            // 로딩 상태로 변경하여 중복 터치 차단
+            votingSec.style.display = 'none';
+            loadingSec.style.display = 'block';
+
+            try {
+                // 브라우저 고유 토큰 생성 (보안 용도)
+                const voterToken = Math.random().toString(36).substring(2) + Date.now().toString(36);
+
+                // Supabase의 votes 테이블에 데이터 INSERT (이 순간 데스크톱 앱의 실시간 그래프가 올라갑니다!)
+                const { error } = await supabase
+                    .from('votes')
+                    .insert([{ 
+                        session_id: roomId, 
+                        candidate_id: candidateId,
+                        voter_token: voterToken 
+                    }]);
+
+                if (error) throw error;
+
+                // 투표 완료 처리 (로컬 스토리지에 도장 쾅)
+                localStorage.setItem(`voted_${roomId}`, 'true');
+                showResult();
+
+            } catch (err) {
+                console.error(err);
+                alert("투표 전송에 실패했습니다. 다시 시도해 주세요.");
+                loadingSec.style.display = 'none';
+                votingSec.style.display = 'block';
+            }
+        }
+
+        // ==========================================
+        // 6. 화면 전환 헬퍼 함수
+        // ==========================================
+        function showError(title, msg) {
+            loadingSec.style.display = 'none';
+            votingSec.style.display = 'none';
+            resultSec.style.display = 'none';
+            
+            document.getElementById('error-title').innerText = title;
+            document.getElementById('error-msg').innerText = msg;
+            errorSec.style.display = 'block';
+        }
+
+        function showResult() {
+            loadingSec.style.display = 'none';
+            votingSec.style.display = 'none';
+            errorSec.style.display = 'none';
+            resultSec.style.display = 'block';
+        }
+
+        // 페이지 로드 시 앱 초기화 실행
+        window.onload = init;
+
+    </script>
+</body>
+</html>
