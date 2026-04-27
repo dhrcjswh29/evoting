@@ -252,33 +252,31 @@
             }
 
             try {
-                // 1. 우리가 만든 'voting_rooms' 테이블에서 데이터 가져오기
-                // .single() 대신 일반 select를 사용해 데이터 존재 여부를 더 확실히 체크합니다.
-                const { data: rows, error: roomErr } = await supabaseClient
-                    .from('voting_rooms')
-                    .select('is_active, candidates')
-                    .eq('id', roomId);
+                // 1. voting_sessions 테이블에서 투표 활성화 여부 확인
+                const { data: sessionData, error: sessionErr } = await supabaseClient
+                    .from('voting_sessions')
+                    .select('is_active')
+                    .eq('id', roomId)
+                    .single();
 
-                if (roomErr || !rows || rows.length === 0) {
-                    console.error('Room Search Error:', roomErr);
+                if (sessionErr || !sessionData) {
+                    console.error('Session Search Error:', sessionErr);
                     showError('방을 찾을 수 없음', '방 번호가 올바르지 않거나 투표가 삭제되었습니다.');
                     return;
                 }
 
-                const roomData = rows[0];
-
-                if (!roomData.is_active) {
+                if (!sessionData.is_active) {
                     showError('투표 종료', '이미 마감된 투표입니다.');
                     return;
                 }
 
-                // 2. JSON 형태의 후보자 목록 안전하게 파싱하기
-                let candidates = roomData.candidates;
-                if (typeof candidates === 'string') {
-                    try { candidates = JSON.parse(candidates); } catch(e) {}
-                }
+                // 2. candidates 테이블에서 후보자 목록 가져오기
+                const { data: candidates, error: candidateErr } = await supabaseClient
+                    .from('candidates')
+                    .select('*')
+                    .eq('session_id', roomId);
 
-                if (!candidates || candidates.length === 0) {
+                if (candidateErr || !candidates || candidates.length === 0) {
                     showError('후보자 없음', '등록된 후보자가 없습니다.');
                     return;
                 }
@@ -321,7 +319,7 @@
                 btn.innerHTML = `<span class="candidate-name">${displayName}</span>`;
                 
                 // 투표하기 이벤트 연동
-                btn.onclick = () => castVote(displayName);
+                btn.onclick = () => castVote(c.id, displayName);
                 
                 listDiv.appendChild(btn);
             });
@@ -334,7 +332,7 @@
         // ==========================================
         // 5. 투표 데이터 전송 함수
         // ==========================================
-        async function castVote(candidateName) {
+        async function castVote(candidateId, candidateName) {
             // 더블클릭 방지 및 확인창
             if(!confirm(`[${candidateName}] 후보에게 투표하시겠습니까?\n한 번 투표하면 번복할 수 없습니다.`)) return;
 
@@ -350,9 +348,9 @@
                 const { error } = await supabaseClient
                     .from('votes')
                     .insert([{ 
-                        room_id: roomId, 
-                        candidate_name: candidateName,
-                        voter_id: voterToken 
+                        session_id: roomId, 
+                        candidate_id: candidateId,
+                        voter_token: voterToken 
                     }]);
 
                 if (error) throw error;
