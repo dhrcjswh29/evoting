@@ -220,7 +220,7 @@
         const SUPABASE_URL = 'https://zeebipggzejvecfmwjti.supabase.co';
         const SUPABASE_ANON_KEY = 'sb_publishable_ryAPFRiUIR0ulwLvofoTRQ_Z22kPoa0';
         
-        const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
         // ==========================================
         // 2. URL 파라미터에서 방 번호(room_id) 추출
@@ -252,30 +252,30 @@
             }
 
             try {
-                // 1. 투표 방이 존재하는지, 활성화(is_active) 상태인지 검증
-                const { data: sessionData, error: sessionErr } = await supabase
-                    .from('voting_sessions')
-                    .select('is_active')
+                // 1. 우리가 만든 'voting_rooms' 테이블에서 데이터 가져오기
+                const { data: roomData, error: roomErr } = await supabaseClient
+                    .from('voting_rooms')
+                    .select('is_active, candidates')
                     .eq('id', roomId)
                     .single();
 
-                if (sessionErr || !sessionData) {
+                if (roomErr || !roomData) {
                     showError('방을 찾을 수 없음', '존재하지 않거나 삭제된 투표입니다.');
                     return;
                 }
 
-                if (!sessionData.is_active) {
+                if (!roomData.is_active) {
                     showError('투표 종료', '이미 마감된 투표입니다.');
                     return;
                 }
 
-                // 2. 후보자 목록 불러오기
-                const { data: candidates, error: candidateErr } = await supabase
-                    .from('candidates')
-                    .select('*')
-                    .eq('session_id', roomId);
+                // 2. JSON 형태의 후보자 목록 안전하게 파싱하기
+                let candidates = roomData.candidates;
+                if (typeof candidates === 'string') {
+                    try { candidates = JSON.parse(candidates); } catch(e) {}
+                }
 
-                if (candidateErr || !candidates || candidates.length === 0) {
+                if (!candidates || candidates.length === 0) {
                     showError('후보자 없음', '등록된 후보자가 없습니다.');
                     return;
                 }
@@ -299,23 +299,26 @@
                 const btn = document.createElement('button');
                 btn.className = 'candidate-btn';
                 
-                // Color Theme 파싱 (ex: "0xFF2196F3" -> "#2196F3")
+                // Color Theme 파싱
                 let hexColor = '#ffffff';
                 if (c.color_theme) {
                     try {
                         const intColor = parseInt(c.color_theme);
                         hexColor = '#' + (intColor & 0xFFFFFF).toString(16).padStart(6, '0');
                     } catch(e) {}
+                } else if (c.color) {
+                    hexColor = c.color;
                 }
                 btn.style.setProperty('--theme-color', hexColor);
                 
-                // 버튼 하나씩 순차적으로 나타나는 애니메이션 (Stagger effect)
                 btn.style.animation = `slideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) ${0.1 * index}s both`;
 
-                btn.innerHTML = `<span class="candidate-name">${c.name}</span>`;
+                // 후보자 이름 설정 (데이터 누락 방지)
+                const displayName = c.name || c.candidate_name || `후보 ${index + 1}`;
+                btn.innerHTML = `<span class="candidate-name">${displayName}</span>`;
                 
                 // 투표하기 이벤트 연동
-                btn.onclick = () => castVote(c.id, c.name);
+                btn.onclick = () => castVote(displayName);
                 
                 listDiv.appendChild(btn);
             });
@@ -328,7 +331,7 @@
         // ==========================================
         // 5. 투표 데이터 전송 함수
         // ==========================================
-        async function castVote(candidateId, candidateName) {
+        async function castVote(candidateName) {
             // 더블클릭 방지 및 확인창
             if(!confirm(`[${candidateName}] 후보에게 투표하시겠습니까?\n한 번 투표하면 번복할 수 없습니다.`)) return;
 
@@ -341,12 +344,12 @@
                 const voterToken = Math.random().toString(36).substring(2) + Date.now().toString(36);
 
                 // Supabase의 votes 테이블에 데이터 INSERT (이 순간 데스크톱 앱의 실시간 그래프가 올라갑니다!)
-                const { error } = await supabase
+                const { error } = await supabaseClient
                     .from('votes')
                     .insert([{ 
-                        session_id: roomId, 
-                        candidate_id: candidateId,
-                        voter_token: voterToken 
+                        room_id: roomId, 
+                        candidate_name: candidateName,
+                        voter_id: voterToken 
                     }]);
 
                 if (error) throw error;
