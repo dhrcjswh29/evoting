@@ -253,16 +253,19 @@
 
             try {
                 // 1. 우리가 만든 'voting_rooms' 테이블에서 데이터 가져오기
-                const { data: roomData, error: roomErr } = await supabaseClient
+                // .single() 대신 일반 select를 사용해 데이터 존재 여부를 더 확실히 체크합니다.
+                const { data: rows, error: roomErr } = await supabaseClient
                     .from('voting_rooms')
                     .select('is_active, candidates')
-                    .eq('id', roomId)
-                    .single();
+                    .eq('id', roomId);
 
-                if (roomErr || !roomData) {
-                    showError('방을 찾을 수 없음', '존재하지 않거나 삭제된 투표입니다.');
+                if (roomErr || !rows || rows.length === 0) {
+                    console.error('Room Search Error:', roomErr);
+                    showError('방을 찾을 수 없음', '방 번호가 올바르지 않거나 투표가 삭제되었습니다.');
                     return;
                 }
+
+                const roomData = rows[0];
 
                 if (!roomData.is_active) {
                     showError('투표 종료', '이미 마감된 투표입니다.');
@@ -375,7 +378,8 @@
             resultSec.style.display = 'none';
             
             document.getElementById('error-title').innerText = title;
-            document.getElementById('error-msg').innerText = msg;
+            // 에러 메시지에 현재 접속을 시도한 방 번호(ID)를 함께 띄워 확인을 돕습니다.
+            document.getElementById('error-msg').innerHTML = msg + `<br><small style="opacity:0.5; font-size:10px;">ID: ${roomId}</small>`;
             errorSec.style.display = 'block';
         }
 
