@@ -178,6 +178,38 @@
             to { transform: scale(1); opacity: 1; }
         }
 
+        /* [6] 기권 버튼 (우측 하단 고정) */
+        .abstain-btn {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            background: rgba(200, 200, 200, 0.2);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: rgba(255, 255, 255, 0.8);
+            padding: 10px 18px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            transition: all 0.3s ease;
+            z-index: 100;
+            display: none; /* 기본은 숨김 */
+        }
+        
+        .abstain-btn:hover {
+            background: rgba(255, 50, 50, 0.6); /* 기권에 맞는 붉은 경고 빛 */
+            color: white;
+            border-color: rgba(255, 100, 100, 0.8);
+            transform: translateY(-2px);
+        }
+
+        .abstain-btn:active {
+            transform: translateY(1px);
+        }
+
     </style>
 </head>
 <body>
@@ -203,6 +235,9 @@
             <div class="candidate-list" id="candidate-list">
                 <!-- JS에서 동적으로 버튼 추가됨 -->
             </div>
+            
+            <!-- 기권 버튼 -->
+            <button id="abstain-btn" class="abstain-btn" onclick="castAbstainVote()">기권하기</button>
         </div>
 
         <!-- 투표 완료 화면 -->
@@ -255,7 +290,7 @@
                 // 1. voting_sessions 테이블에서 투표 활성화 여부 확인
                 const { data: sessionData, error: sessionErr } = await supabaseClient
                     .from('voting_sessions')
-                    .select('is_active')
+                    .select('is_active, allow_abstain')
                     .eq('id', roomId)
                     .single();
 
@@ -268,6 +303,11 @@
                 if (!sessionData.is_active) {
                     showError('투표 종료', '이미 마감된 투표입니다.');
                     return;
+                }
+
+                // 기권 토글 활성화 여부에 따라 버튼 표시 준비
+                if (sessionData.allow_abstain) {
+                    document.getElementById('abstain-btn').style.display = 'block';
                 }
 
                 // 2. candidates 테이블에서 후보자 목록 가져오기
@@ -362,6 +402,48 @@
             } catch (err) {
                 console.error(err);
                 alert("투표 전송에 실패했습니다. 다시 시도해 주세요.");
+                loadingSec.style.display = 'none';
+                votingSec.style.display = 'block';
+            }
+        }
+
+        // ==========================================
+        // 6. 기권 데이터 전송 함수
+        // ==========================================
+        async function castAbstainVote() {
+            if(!confirm(`정말 기권하시겠습니까?\n기권 시 어떠한 후보에게도 표가 가지 않으며 번복할 수 없습니다.`)) return;
+
+            // 로딩 상태로 변경
+            votingSec.style.display = 'none';
+            loadingSec.style.display = 'block';
+
+            try {
+                // 1. 현재 기권표 개수 가져오기
+                const { data: session, error: fetchErr } = await supabaseClient
+                    .from('voting_sessions')
+                    .select('abstain_votes')
+                    .eq('id', roomId)
+                    .single();
+
+                if (fetchErr) throw fetchErr;
+
+                const currentAbstains = session.abstain_votes || 0;
+
+                // 2. 기권표 1 증가시켜 업데이트
+                const { error: updateErr } = await supabaseClient
+                    .from('voting_sessions')
+                    .update({ abstain_votes: currentAbstains + 1 })
+                    .eq('id', roomId);
+
+                if (updateErr) throw updateErr;
+
+                // 투표 완료 처리
+                localStorage.setItem(`voted_${roomId}`, 'true');
+                showResult();
+
+            } catch (err) {
+                console.error(err);
+                alert("기권 처리에 실패했습니다. 다시 시도해 주세요.");
                 loadingSec.style.display = 'none';
                 votingSec.style.display = 'block';
             }
