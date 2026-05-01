@@ -10,6 +10,13 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
     <style>
+        @font-face {
+            font-family: 'Maplestory';
+            src: url('./MaplestoryL.ttf') format('truetype');
+            font-weight: normal;
+            font-style: normal;
+        }
+
         /* [1] 전역 스타일 & 다크모드/글래스모피즘 기반 배경 */
         :root {
             --bg-gradient-1: #4facfe;
@@ -24,7 +31,7 @@
             box-sizing: border-box;
             margin: 0;
             padding: 0;
-            font-family: 'Inter', sans-serif;
+            font-family: 'Maplestory', 'Inter', sans-serif;
             -webkit-tap-highlight-color: transparent;
         }
 
@@ -56,19 +63,17 @@
             100% { transform: rotate(360deg); }
         }
 
-        /* [2] 메인 컨테이너 (글래스모피즘) */
+        /* [2] 메인 컨테이너 (솔리드 화이트) */
         .container {
-            background: var(--glass-bg);
-            backdrop-filter: blur(16px);
-            -webkit-backdrop-filter: blur(16px);
-            border: 1px solid var(--glass-border);
+            background: #ffffff;
             border-radius: 24px;
             padding: 40px 24px;
             width: 100%;
             max-width: 480px;
-            box-shadow: var(--glass-shadow);
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
             text-align: center;
             animation: slideUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) both;
+            color: #111111;
         }
 
         @keyframes slideUp {
@@ -81,13 +86,15 @@
             font-weight: 800;
             margin-bottom: 8px;
             letter-spacing: -0.5px;
-            text-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            text-shadow: none;
+            color: #000000; /* 검정색 굵은 글씨 */
         }
 
         p.subtitle {
             font-size: 15px;
             opacity: 0.85;
             margin-bottom: 32px;
+            color: #444444;
         }
 
         /* [3] 후보자 버튼 리스트 */
@@ -98,50 +105,47 @@
         }
 
         .candidate-btn {
-            background: rgba(255, 255, 255, 0.2);
-            border: 1px solid rgba(255,255,255,0.4);
+            background: #87CEEB; /* 깔끔한 하늘색 */
+            border: none;
             border-radius: 16px;
             padding: 20px;
-            color: white;
-            font-size: 20px;
-            font-weight: 600;
+            color: #111111;
+            font-size: 22px;
+            font-weight: bold;
             cursor: pointer;
             transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
             position: relative;
             overflow: hidden;
             display: flex;
             align-items: center;
-            justify-content: center;
+            justify-content: flex-start; /* 왼쪽 정렬 */
             box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-        }
-
-        /* 버튼 컬러 테마 적용을 위한 가상 요소 */
-        .candidate-btn::before {
-            content: '';
-            position: absolute;
-            top: 0; left: 0; width: 10px; height: 100%;
-            background-color: var(--theme-color, #ffffff);
-            transition: width 0.3s ease;
         }
 
         .candidate-btn:hover {
             transform: translateY(-4px);
             box-shadow: 0 8px 20px rgba(0,0,0,0.2);
-            background: rgba(255, 255, 255, 0.3);
+            background: #76BDE0;
         }
 
         .candidate-btn:active {
             transform: translateY(2px) scale(0.98);
         }
 
-        .candidate-btn:hover::before {
-            width: 100%;
-            opacity: 0.2;
+        .candidate-number {
+            font-size: 18px;
+            font-weight: 800;
+            color: #002244; /* 짙은 네이비 */
+            background: rgba(255, 255, 255, 0.6);
+            padding: 6px 12px;
+            border-radius: 12px;
+            margin-right: 15px;
         }
 
         .candidate-name {
             z-index: 1;
             letter-spacing: 1px;
+            color: #111111;
         }
 
         /* [4] 로딩 애니메이션 */
@@ -178,21 +182,19 @@
             to { transform: scale(1); opacity: 1; }
         }
 
-        /* [6] 기권 버튼 (우측 하단 고정 -> 목록 아래로 변경) */
+        /* [6] 기권 버튼 (솔리드 화이트 바탕, 텍스트 다크) */
         .abstain-btn {
             display: block;
             margin-top: 30px;
-            background: rgba(200, 200, 200, 0.2);
-            backdrop-filter: blur(8px);
-            -webkit-backdrop-filter: blur(8px);
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            color: rgba(255, 255, 255, 0.8);
+            background: #ffffff;
+            border: 2px solid #dddddd;
+            color: #111111;
             padding: 14px 28px;
             border-radius: 25px;
             font-size: 16px;
             font-weight: bold;
             cursor: pointer;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
             transition: all 0.3s ease;
             display: none; /* 기본은 숨김 */
             width: fit-content;
@@ -201,11 +203,11 @@
         }
         
         .abstain-btn:hover {
-            background: rgba(255, 50, 50, 0.6); /* 기권에 맞는 붉은 경고 빛 */
-            color: white;
-            border-color: rgba(255, 100, 100, 0.8);
+            background: #ffeeee; /* 경고를 위한 연한 붉은색 */
+            color: #cc0000;
+            border-color: #ffcccc;
             transform: translateY(-2px);
-            box-shadow: 0 6px 16px rgba(255, 50, 50, 0.3);
+            box-shadow: 0 6px 16px rgba(255, 50, 50, 0.2);
         }
 
         .abstain-btn:active {
@@ -232,7 +234,7 @@
 
         <!-- 투표 화면 -->
         <div id="voting-section" style="display: none;">
-            <h1>투표하기</h1>
+            <h1 id="vote-title">투표하기</h1>
             <p class="subtitle">한 표를 신중하게 행사해 주세요.</p>
             <div class="candidate-list" id="candidate-list">
                 <!-- JS에서 동적으로 버튼 추가됨 -->
@@ -312,6 +314,9 @@
                     document.getElementById('abstain-btn').style.display = 'block';
                 }
 
+                // 투표 제목 동적 적용
+                document.getElementById('vote-title').textContent = `${sessionData.title} 투표하기`;
+
                 // 2. candidates 테이블에서 후보자 목록 가져오기
                 const { data: candidates, error: candidateErr } = await supabaseClient
                     .from('candidates')
@@ -342,23 +347,11 @@
                 const btn = document.createElement('button');
                 btn.className = 'candidate-btn';
                 
-                // Color Theme 파싱
-                let hexColor = '#ffffff';
-                if (c.color_theme) {
-                    try {
-                        const intColor = parseInt(c.color_theme);
-                        hexColor = '#' + (intColor & 0xFFFFFF).toString(16).padStart(6, '0');
-                    } catch(e) {}
-                } else if (c.color) {
-                    hexColor = c.color;
-                }
-                btn.style.setProperty('--theme-color', hexColor);
-                
                 btn.style.animation = `slideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) ${0.1 * index}s both`;
 
                 // 후보자 이름 설정 (데이터 누락 방지)
                 const displayName = c.name || c.candidate_name || `후보 ${index + 1}`;
-                btn.innerHTML = `<span class="candidate-name">${displayName}</span>`;
+                btn.innerHTML = `<span class="candidate-number">기호 ${index + 1}번</span><span class="candidate-name">${displayName}</span>`;
                 
                 // 투표하기 이벤트 연동
                 btn.onclick = () => castVote(c.id, displayName);
