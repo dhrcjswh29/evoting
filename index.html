@@ -294,7 +294,7 @@
                 // 1. voting_sessions 테이블에서 투표 활성화 여부 확인
                 const { data: sessionData, error: sessionErr } = await supabaseClient
                     .from('voting_sessions')
-                    .select('is_active, allow_abstain')
+                    .select('is_active, allow_abstain, title')
                     .eq('id', roomId)
                     .single();
 
