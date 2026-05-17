@@ -235,7 +235,7 @@
         <!-- 투표 화면 -->
         <div id="voting-section" style="display: none;">
             <h1 id="vote-title">투표하기</h1>
-            <p class="subtitle">한 표를 신중하게 행사해 주세요.</p>
+            <p class="subtitle" id="vote-subtitle">한 표를 신중하게 행사해 주세요.</p>
             <div class="candidate-list" id="candidate-list">
                 <!-- JS에서 동적으로 버튼 추가됨 -->
             </div>
@@ -274,6 +274,22 @@
         const resultSec = document.getElementById('result-section');
         const listDiv = document.getElementById('candidate-list');
 
+        // 전역 변수 설정
+        let maxVotesPerPerson = 1;
+        let allowDuplicateVotes = false;
+        let votedCandidates = [];
+        let globalCandidates = [];
+
+        function updateVoteSubtitle() {
+            const subtitle = document.getElementById('vote-subtitle');
+            if (maxVotesPerPerson > 1) {
+                subtitle.innerHTML = `총 <b>${maxVotesPerPerson}표</b> 중 <b>${maxVotesPerPerson - votedCandidates.length}표</b> 남았습니다.<br>` +
+                    (allowDuplicateVotes ? '중복 투표가 허용됩니다.' : '동일한 후보에게 중복 투표할 수 없습니다.');
+            } else {
+                subtitle.innerText = '한 표를 신중하게 행사해 주세요.';
+            }
+        }
+
         // ==========================================
         // 3. 앱 초기화 로직
         // ==========================================
@@ -284,17 +300,14 @@
             }
 
             // [로컬 중복 투표 방지] 이 기기에서 이미 이 방에 투표했는지 확인
-            const hasVoted = localStorage.getItem(`voted_${roomId}`);
-            if (hasVoted) {
-                showResult();
-                return;
-            }
+            const oldHasVoted = localStorage.getItem(`voted_${roomId}`);
+            votedCandidates = JSON.parse(localStorage.getItem(`voted_cands_${roomId}`) || '[]');
 
             try {
                 // 1. voting_sessions 테이블에서 투표 활성화 여부 확인
                 const { data: sessionData, error: sessionErr } = await supabaseClient
                     .from('voting_sessions')
-                    .select('is_active, allow_abstain, title')
+                    .select('is_active, allow_abstain, title, max_votes_per_person, allow_duplicate_votes')
                     .eq('id', roomId)
                     .single();
 
@@ -303,6 +316,16 @@
                     showError('방을 찾을 수 없음', '방 번호가 올바르지 않거나 투표가 삭제되었습니다.');
                     return;
                 }
+
+                maxVotesPerPerson = sessionData.max_votes_per_person || 1;
+                allowDuplicateVotes = sessionData.allow_duplicate_votes || false;
+
+                if (oldHasVoted || votedCandidates.length >= maxVotesPerPerson) {
+                    showResult();
+                    return;
+                }
+
+                updateVoteSubtitle();
 
                 if (!sessionData.is_active) {
                     showError('투표 종료', '이미 마감된 투표입니다.');
@@ -328,8 +351,10 @@
                     return;
                 }
 
+                globalCandidates = candidates; // 캐싱
+
                 // 3. UI 렌더링
-                renderCandidates(candidates);
+                renderCandidates(globalCandidates);
 
             } catch (err) {
                 console.error(err);
@@ -347,6 +372,15 @@
                 const btn = document.createElement('button');
                 btn.className = 'candidate-btn';
                 
+                // 중복 투표 불가이고 이미 투표한 후보라면 비활성화
+                const isVotedForThis = votedCandidates.includes(c.id);
+                if (!allowDuplicateVotes && isVotedForThis) {
+                    btn.disabled = true;
+                    btn.style.opacity = '0.5';
+                    btn.style.cursor = 'not-allowed';
+                    btn.style.background = '#cccccc'; // 회색 처리
+                }
+
                 btn.style.animation = `slideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) ${0.1 * index}s both`;
 
                 // 후보자 이름 설정 (데이터 누락 방지)
@@ -354,7 +388,10 @@
                 btn.innerHTML = `<span class="candidate-number">기호 ${index + 1}번</span><span class="candidate-name">${displayName}</span>`;
                 
                 // 투표하기 이벤트 연동
-                btn.onclick = () => castVote(c.id, displayName);
+                btn.onclick = () => {
+                    if (btn.disabled) return;
+                    castVote(c.id, displayName);
+                };
                 
                 listDiv.appendChild(btn);
             });
@@ -368,6 +405,11 @@
         // 5. 투표 데이터 전송 함수
         // ==========================================
         async function castVote(candidateId, candidateName) {
+            if (!allowDuplicateVotes && votedCandidates.includes(candidateId)) {
+                alert("이미 투표한 후보입니다. 중복 투표는 불가능합니다.");
+                return;
+            }
+
             // 더블클릭 방지 및 확인창
             if(!confirm(`[${candidateName}] 후보에게 투표하시겠습니까?\n한 번 투표하면 번복할 수 없습니다.`)) return;
 
@@ -391,8 +433,19 @@
                 if (error) throw error;
 
                 // 투표 완료 처리 (로컬 스토리지에 도장 쾅)
-                localStorage.setItem(`voted_${roomId}`, 'true');
-                showResult();
+                votedCandidates.push(candidateId);
+                localStorage.setItem(`voted_cands_${roomId}`, JSON.stringify(votedCandidates));
+
+                if (votedCandidates.length >= maxVotesPerPerson) {
+                    localStorage.setItem(`voted_${roomId}`, 'true');
+                    showResult();
+                } else {
+                    alert(`투표가 접수되었습니다!\n남은 표: ${maxVotesPerPerson - votedCandidates.length}표`);
+                    loadingSec.style.display = 'none';
+                    votingSec.style.display = 'block';
+                    updateVoteSubtitle();
+                    renderCandidates(globalCandidates); // 중복 방지 비활성화 업데이트를 위해 재렌더링
+                }
 
             } catch (err) {
                 console.error(err);
@@ -433,6 +486,8 @@
                 if (updateErr) throw updateErr;
 
                 // 투표 완료 처리
+                votedCandidates = new Array(maxVotesPerPerson).fill('abstain');
+                localStorage.setItem(`voted_cands_${roomId}`, JSON.stringify(votedCandidates));
                 localStorage.setItem(`voted_${roomId}`, 'true');
                 showResult();
 
